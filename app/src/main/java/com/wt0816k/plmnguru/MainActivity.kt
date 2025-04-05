@@ -16,8 +16,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.MoreVert
@@ -44,6 +44,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -53,7 +54,6 @@ import androidx.compose.ui.unit.sp
 import com.wt0816k.plmnguru.ui.theme.PlmnGuruTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
@@ -184,16 +184,49 @@ fun MainScreen() {
                             onDismissRequest = { menuExpanded = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Detach from network") },
-                                leadingIcon = { Icon(painterResource(R.drawable.outline_do_not_disturb_on_24), contentDescription = "Detach from network") },
+                                text = { Text("Run network scan (once)") },
+                                leadingIcon = {
+                                    Icon(
+                                        painterResource(R.drawable.baseline_search_24),
+                                        contentDescription = "Run network scan (once)"
+                                    )
+                                },
                                 onClick = {
                                     menuExpanded = false
-                                    detachNetwork()
+                                    scanNetwork(device)
+                                }
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("Auto connect to network") },
+                                leadingIcon = {
+                                    Icon(
+                                        painterResource(R.drawable.baseline_find_replace_24),
+                                        contentDescription = "Detach from network"
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    autoAttachNetwork(device)
                                 }
                             )
                             DropdownMenuItem(
+                                text = { Text("Detach from network") },
+                                leadingIcon = {
+                                    Icon(
+                                        painterResource(R.drawable.outline_do_not_disturb_on_24),
+                                        contentDescription = "Detach from network"
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    detachNetwork(device)
+                                }
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
                                 text = { Text("Exit") },
-                                leadingIcon = { Icon(Icons.Filled.ExitToApp, contentDescription = "Exit") },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Exit") },
                                 onClick = {
                                     menuExpanded = false
                                     activity?.finishAndRemoveTask()
@@ -224,7 +257,7 @@ fun MainScreen() {
             Box(modifier = Modifier.padding(innerPadding)) {
                 if (isListView) {
                     LazyColumn {
-                        items(networks.value) {network ->
+                        items(networks.value) { network ->
                             val items = network.split(",")
                             val registerState = items[0].toInt()
                             val longName = items[1]
@@ -235,9 +268,8 @@ fun MainScreen() {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 6.dp, bottom = 6.dp)
                                     .clickable {
-                                        attachNetwork(plmn)
+                                        attachNetwork(device, plmn)
                                     },
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Start
@@ -250,6 +282,11 @@ fun MainScreen() {
                                         3 -> painterResource(R.drawable.baseline_block_24)
                                         else -> painterResource(R.drawable.baseline_help_outline_24)
                                     },
+                                    tint = when (registerState) {
+                                        2 -> Color(0xff24c94e)
+                                        3 -> Color(0xffc9242f)
+                                        else -> Color.Unspecified
+                                    },
                                     contentDescription = "Register State",
                                     modifier = Modifier
                                         .padding(start = 10.dp, end = 10.dp)
@@ -257,9 +294,11 @@ fun MainScreen() {
                                 Column {
                                     Row(
                                         modifier = Modifier
+                                            .padding(top = 7.dp)
                                     ) {
                                         Text(
                                             text = plmn.toString(),
+                                            fontWeight = FontWeight.Bold,
                                             modifier = Modifier
                                                 .padding(end = 8.dp)
                                         )
@@ -292,6 +331,7 @@ fun MainScreen() {
                                     }
                                     Row(
                                         modifier = Modifier
+                                            .padding(bottom = 7.dp)
                                     ) {
                                         Text(
                                             text = "$longName - $shortName",
@@ -323,21 +363,41 @@ fun MainScreen() {
     }
 }
 
-private fun attachNetwork(plmn: Int) {
+private fun scanNetwork(device: String) {
     CoroutineScope(Dispatchers.IO).launch {
         withContext(Dispatchers.IO) {
             Runtime.getRuntime().exec(
-                arrayOf("su", "-c", "echo", "-e", """ "AT+COPS=1,2,\"$plmn\"\r" """, ">", "/dev/smd7")
+                arrayOf("su", "-c", "echo", "-e", """ "AT+COPS=?\r" """, ">", device)
             )
         }
     }
 }
 
-private fun detachNetwork() {
+private fun attachNetwork(device: String, plmn: Int) {
     CoroutineScope(Dispatchers.IO).launch {
         withContext(Dispatchers.IO) {
             Runtime.getRuntime().exec(
-                arrayOf("su", "-c", "echo", "-e", """ "AT+COPS=2\r" """, ">", "/dev/smd7")
+                arrayOf("su", "-c", "echo", "-e", """ "AT+COPS=1,2,\"$plmn\"\r" """, ">", device)
+            )
+        }
+    }
+}
+
+private fun autoAttachNetwork(device: String) {
+    CoroutineScope(Dispatchers.IO).launch {
+        withContext(Dispatchers.IO) {
+            Runtime.getRuntime().exec(
+                arrayOf("su", "-c", "echo", "-e", """ "AT+COPS=0\r" """, ">", device)
+            )
+        }
+    }
+}
+
+private fun detachNetwork(device: String) {
+    CoroutineScope(Dispatchers.IO).launch {
+        withContext(Dispatchers.IO) {
+            Runtime.getRuntime().exec(
+                arrayOf("su", "-c", "echo", "-e", """ "AT+COPS=2\r" """, ">", device)
             )
         }
     }
